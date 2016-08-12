@@ -20,6 +20,7 @@ module Client.Image.Message
   , quietIdentifier
   , coloredUserInfo
   , coloredIdentifier
+  , renderCapCmd
   ) where
 
 import           Client.Image.MircFormatting

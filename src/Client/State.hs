@@ -33,6 +33,7 @@ module Client.State
   , clientConnection
   , clientBell
   , clientExtensions
+  , clientLogs
   , initialClientState
   , clientShutdown
   , clientStartExtensions
@@ -74,6 +75,7 @@ import           Client.CApi
 import           Client.Configuration
 import           Client.Configuration.ServerSettings
 import           Client.Image.Message
+import           Client.Log
 import           Client.Message
 import           Client.Network.Async
 import           Client.State.Channel
@@ -110,6 +112,7 @@ import           Network.Connection (ConnectionContext, initConnectionContext)
 import           Text.Regex.TDFA
 import           Text.Regex.TDFA.String (compile)
 import           Text.Regex.TDFA.Text () -- RegexLike Regex Text orphan
+import           Network.Connection
 
 -- | All state information for the IRC client
 data ClientState = ClientState
@@ -136,6 +139,8 @@ data ClientState = ClientState
   , _clientIgnores           :: !(HashSet Identifier)     -- ^ ignored nicknames
 
   , _clientExtensions        :: [ActiveExtension]       -- ^ Active extensions
+
+  , _clientLogs              :: ![LogMsg]               -- ^ log messages that should be written
   }
 
 makeLenses ''ClientState
@@ -185,6 +190,7 @@ initialClientState cfg vty =
         , _clientNextConnectionId  = 0
         , _clientBell              = False
         , _clientExtensions        = []
+        , _clientLogs              = []
         }
 
 -- | Forcefully terminate the connection currently associated
@@ -205,7 +211,8 @@ recordChannelMessage ::
   ClientMessage ->
   ClientState -> ClientState
 recordChannelMessage network channel msg st =
-  recordWindowLine focus importance wl st
+  over clientLogs (\logs -> LogMsg focus (_msgBody msg) (_msgTime msg) rendParams : logs) $
+    recordWindowLine focus importance wl st
   where
     focus      = ChannelFocus network channel'
     wl         = toWindowLine rendParams msg
@@ -346,7 +353,9 @@ computeUserSigils network channel user =
 
 -- | Record a message on a network window
 recordNetworkMessage :: ClientMessage -> ClientState -> ClientState
-recordNetworkMessage msg st = recordWindowLine focus importance wl st
+recordNetworkMessage msg st =
+  over clientLogs (\logs -> LogMsg focus (_msgBody msg) (_msgTime msg) defaultRenderParams : logs) $
+    recordWindowLine focus importance wl st
   where
     network    = view msgNetwork msg
     focus      | Text.null network = Unfocused
@@ -388,7 +397,8 @@ toWindowLine' config =
 
 -- | Function applied to the client state every redraw.
 clientTick :: ClientState -> ClientState
-clientTick = set clientBell False . markSeen
+clientTick =
+  set clientLogs [] . set clientBell False . markSeen
 
 
 -- | Mark the messages on the current window as seen.

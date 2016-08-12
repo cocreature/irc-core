@@ -22,6 +22,7 @@ import           Client.Configuration.ServerSettings
 import           Client.Hook
 import           Client.Hooks
 import           Client.Image
+import           Client.Log
 import           Client.Message
 import           Client.Network.Async
 import           Client.State
@@ -99,6 +100,7 @@ eventLoop st0 =
 
      -- check st0 for bell, it will be always be cleared in st1
      when (view clientBell st0) (beep vty)
+     writeLogMessages (reverse (view clientLogs st0))
      update vty pic
 
      event <- getEvent st
