@@ -81,6 +81,7 @@ executable glirc2
                        hashable             >=1.2.4  && <1.3,
                        irc-core             >=2.1    && <2.2,
                        lens                 >=4.14   && <4.15,
+                       lrucaching           >=0.3    && <0.4,
                        network              >=2.6.2  && <2.7,
                        split                >=0.2    && <0.3,
                        stm                  >=2.4    && <2.5,

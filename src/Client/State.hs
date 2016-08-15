@@ -34,6 +34,7 @@ module Client.State
   , clientBell
   , clientExtensions
   , clientLogs
+  , clientLogFileCache
   , initialClientState
   , clientShutdown
   , clientStartExtensions
@@ -88,6 +89,7 @@ import           Control.DeepSeq
 import           Control.Exception
 import           Control.Lens
 import           Control.Monad
+import           Data.LruCache.IO.Finalizer (LruHandle,newLruHandle)
 import           Data.Foldable
 import           Data.Either
 import           Data.HashMap.Strict (HashMap)
@@ -109,6 +111,7 @@ import           Irc.RawIrcMsg
 import           Irc.UserInfo
 import           LensUtils
 import           Network.Connection (ConnectionContext, initConnectionContext)
+import           System.IO (Handle)
 import           Text.Regex.TDFA
 import           Text.Regex.TDFA.String (compile)
 import           Text.Regex.TDFA.Text () -- RegexLike Regex Text orphan
@@ -141,6 +144,7 @@ data ClientState = ClientState
   , _clientExtensions        :: [ActiveExtension]       -- ^ Active extensions
 
   , _clientLogs              :: ![LogMsg]               -- ^ log messages that should be written
+  , _clientLogFileCache      :: !(LruHandle FilePath Handle)    -- ^ lru cache of file handles indexes by filepaths
   }
 
 makeLenses ''ClientState
@@ -170,6 +174,7 @@ initialClientState cfg vty =
   do (width,height) <- displayBounds (outputIface vty)
      cxt            <- initConnectionContext
      events         <- atomically newTQueue
+     logFileCache   <- newLruHandle 10 -- TODO remove hardcoded capacity
      return ClientState
         { _clientWindows           = _Empty # ()
         , _clientNetworkMap        = _Empty # ()
@@ -191,6 +196,7 @@ initialClientState cfg vty =
         , _clientBell              = False
         , _clientExtensions        = []
         , _clientLogs              = []
+        , _clientLogFileCache      = logFileCache
         }
 
 -- | Forcefully terminate the connection currently associated

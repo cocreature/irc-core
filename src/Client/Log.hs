@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE BangPatterns #-}
 {-|
 Module      : Client.Log
 Description : Logging of messages
@@ -19,14 +20,17 @@ module Client.Log
   ) where
 
 import           Control.Lens (view)
+import           Data.LruCache.IO.Finalizer (LruHandle,cached)
+import           Data.Foldable (traverse_)
 import           Data.Monoid ((<>))
 import           Data.Text (Text)
 import qualified Data.Text as Text
-import           Data.Text.IO (hPutStrLn)
+import           Data.Text.IO (hPutStrLn,appendFile)
 import           Data.Time (ZonedTime,defaultTimeLocale,formatTime)
+import           Prelude hiding (lookup,appendFile)
 import           System.Directory (createDirectoryIfMissing,getXdgDirectory,XdgDirectory(..))
 import           System.FilePath ((</>),takeDirectory)
-import           System.IO (withFile,IOMode(..))
+import           System.IO (Handle,IOMode(..),hClose,hFlush,openFile,)
 
 import           Irc.Identifier (idText)
 import           Irc.Message (IrcMsg(..))
@@ -44,17 +48,21 @@ data LogMsg =
          , logRendererParams :: !MessageRendererParams
          }
 
-writeLogMessages :: [LogMsg] -> IO ()
-writeLogMessages = mapM_ writeLogMessage
+writeLogMessages :: LruHandle FilePath Handle -> [LogMsg] -> IO ()
+writeLogMessages cache = mapM_ (writeLogMessage cache)
 
-writeLogMessage :: LogMsg -> IO ()
-writeLogMessage log =
+writeLogMessage :: LruHandle FilePath Handle -> LogMsg -> IO ()
+writeLogMessage cache log =
   do dir <- getLogDirectory
-     let logFile = dir </> logFileName (logFocus log) (logTime log)
-     -- TODO do this once when the channel/network is created?
-     createDirectoryIfMissing True (takeDirectory logFile)
-     withFile logFile AppendMode $ \h ->
-       hPutStrLn h (renderLogMessage log)
+     let filePath = dir </> logFileName (logFocus log) (logTime log)
+     handle <- cached cache filePath (openLogFile filePath) hClose
+     hPutStrLn handle (renderLogMessage log)
+     hFlush handle
+
+openLogFile :: FilePath -> IO Handle
+openLogFile fp =
+  do createDirectoryIfMissing True (takeDirectory fp)
+     openFile fp AppendMode
 
 logFileName :: Focus -> ZonedTime -> FilePath
 logFileName focus time =
